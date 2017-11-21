@@ -113,7 +113,7 @@ private:
 	int		_control_task;			/**< task handle */
 
 	int		_att_sp_sub;			/**< vehicle attitude setpoint */
-	int		_battery_status_sub;		/**< battery status subscription */
+    int		_battery_status_sub;	/**< battery status subscription */
 	int		_ctrl_state_sub;		/**< control state subscription */
 	int		_global_pos_sub;		/**< global position subscription */
 	int		_manual_sub;			/**< notification of manual control updates */
@@ -949,6 +949,13 @@ FixedwingAttitudeControl::task_main()
 
 			/* decide if in stabilized or full manual control */
 			if (_vcontrol_mode.flag_control_rates_enabled) {
+                //=====================================//
+                // Do if to test//
+                PX4_INFO("======================");
+                PX4_INFO("STABILIZED MODE");
+                PX4_INFO("======================");
+                // ===================================//
+
 				/* scale around tuning airspeed */
 				float airspeed;
 
@@ -987,9 +994,16 @@ FixedwingAttitudeControl::task_main()
 
 				// in STABILIZED mode we need to generate the attitude setpoint
 				// from manual user inputs
+
+                // ================================================//
+                // so attitude setpoint is related to manual input
+                // below is the equation
+                // ============================================== //
 				if (!_vcontrol_mode.flag_control_climb_rate_enabled && !_vcontrol_mode.flag_control_offboard_enabled) {
+
 					_att_sp.roll_body = _manual.y * _parameters.man_roll_max + _parameters.rollsp_offset_rad;
 					_att_sp.roll_body = math::constrain(_att_sp.roll_body, -_parameters.man_roll_max, _parameters.man_roll_max);
+
 					_att_sp.pitch_body = -_manual.x * _parameters.man_pitch_max + _parameters.pitchsp_offset_rad;
 					_att_sp.pitch_body = math::constrain(_att_sp.pitch_body, -_parameters.man_pitch_max, _parameters.man_pitch_max);
 					_att_sp.yaw_body = 0.0f;
@@ -1000,6 +1014,9 @@ FixedwingAttitudeControl::task_main()
 					_att_sp.q_d_valid = true;
 
 					int instance;
+                    // ==============================//
+                    // can we logger this _attitiude_setpoint ??
+                    // ============================== //
 					orb_publish_auto(_attitude_setpoint_id, &_attitude_sp_pub, &_att_sp, &instance, ORB_PRIO_DEFAULT);
 				}
 
@@ -1042,15 +1059,18 @@ FixedwingAttitudeControl::task_main()
 
 				/* Prepare data for attitude controllers */
 				struct ECL_ControlData control_input = {};
-				control_input.roll = _roll;
+
+                control_input.roll = _roll;  // _roll, _pitch, _yaw are early computed from ctrl_state
 				control_input.pitch = _pitch;
 				control_input.yaw = _yaw;
 				control_input.body_x_rate = _ctrl_state.roll_rate;
 				control_input.body_y_rate = _ctrl_state.pitch_rate;
 				control_input.body_z_rate = _ctrl_state.yaw_rate;
+
 				control_input.roll_setpoint = roll_sp;
 				control_input.pitch_setpoint = pitch_sp;
 				control_input.yaw_setpoint = yaw_sp;
+
 				control_input.airspeed_min = _parameters.airspeed_min;
 				control_input.airspeed_max = _parameters.airspeed_max;
 				control_input.airspeed = airspeed;
@@ -1063,6 +1083,14 @@ FixedwingAttitudeControl::task_main()
 
 				/* Run attitude controllers */
 				if (_vcontrol_mode.flag_control_attitude_enabled) {
+                // ****************************************** //
+                // here we need to test what kinds of controller we are using //
+                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! //
+
+                // ------------------------------------------ //
+                // attitude controller returns the rate_setpoint //
+                // --------------------------------------------- //
+
 					if (PX4_ISFINITE(roll_sp) && PX4_ISFINITE(pitch_sp)) {
 						_roll_ctrl.control_attitude(control_input);
 						_pitch_ctrl.control_attitude(control_input);
@@ -1075,7 +1103,9 @@ FixedwingAttitudeControl::task_main()
 						control_input.yaw_rate_setpoint = _yaw_ctrl.get_desired_rate();
 
 						/* Run attitude RATE controllers which need the desired attitudes from above, add trim */
+
 						float roll_u = _roll_ctrl.control_euler_rate(control_input);
+
 						_actuators.control[actuator_controls_s::INDEX_ROLL] = (PX4_ISFINITE(roll_u)) ? roll_u + _parameters.trim_roll :
 								_parameters.trim_roll;
 
@@ -1089,6 +1119,7 @@ FixedwingAttitudeControl::task_main()
 						}
 
 						float pitch_u = _pitch_ctrl.control_euler_rate(control_input);
+
 						_actuators.control[actuator_controls_s::INDEX_PITCH] = (PX4_ISFINITE(pitch_u)) ? pitch_u + _parameters.trim_pitch :
 								_parameters.trim_pitch;
 
@@ -1208,6 +1239,12 @@ FixedwingAttitudeControl::task_main()
 				}
 
 			} else {
+                // ================================== //
+                PX4_INFO("!!!!!!!!!!!!!!!!!!!!");
+                PX4_INFO("MANUAL MODE CONTROL");
+                PX4_INFO("No PID CLOSED LOOP control");
+                PX4_INFO("!!!!!!!!!!!!!!!!!!!!");
+                // ================================== //
 				/* manual/direct control */
 				_actuators.control[actuator_controls_s::INDEX_ROLL] = _manual.y * _parameters.man_roll_scale + _parameters.trim_roll;
 				_actuators.control[actuator_controls_s::INDEX_PITCH] = -_manual.x * _parameters.man_pitch_scale +
